@@ -15,6 +15,7 @@ final class LogTarget implements LoggerAwareInterface
   /** @var LoggerInterface  */
   private $m_oLogger;
   private $m_arLog;
+  private $m_bStoreInMemory = true;
 
 //-------------------------------------------------------------------------------------
   public static function getInstance() : LogTarget
@@ -37,6 +38,11 @@ final class LogTarget implements LoggerAwareInterface
   {
     $this->m_oLogger = $logger;
   }
+//-------------------------------------------------------------------------------------
+  public function setStoreInMemory(bool $bStoreLogCalls = true)
+  {
+    $this->m_bStoreInMemory = $bStoreLogCalls;
+  }
 //-------------------------------------------------------------------------------------------------
   public function LogAtLevel($level, $item, array $context, bool $bRemoveCallerFromContext = false)
   {
@@ -45,7 +51,8 @@ final class LogTarget implements LoggerAwareInterface
     $message = self::getMessageFromItem($item);
     if(count($context) == 0 && array_search($level, $arLevelsNeedingTrace) !== false)
       $context = self::getContextFromItem($item, $bRemoveCallerFromContext);
-    $this->storeLog($level, $message, $context);
+    if($this->m_bStoreInMemory)
+      $this->storeLog($level, $message, $context);
     if(is_object($this->m_oLogger))
       $this->m_oLogger->log($level, $message, $context);
     else
