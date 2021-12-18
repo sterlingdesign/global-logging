@@ -46,7 +46,8 @@ final class LogTarget implements LoggerAwareInterface
 //-------------------------------------------------------------------------------------------------
   public function LogAtLevel($level, $item, array $context, bool $bRemoveCallerFromContext = false)
   {
-    static $arLevelsNeedingTrace = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR];
+    //static $arLevelsNeedingTrace = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR];
+    static $arLevelsNeedingTrace = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR, LogLevel::DEBUG];
     $level = self::normalizeLevel($level);
     $message = self::getMessageFromItem($item);
     if(count($context) == 0 && array_search($level, $arLevelsNeedingTrace) !== false)
@@ -118,7 +119,7 @@ final class LogTarget implements LoggerAwareInterface
         $e = new \Exception();
         $context = $e->getTrace();
         // remove this function, LogAtLevel, and one more if $bRemoveCallerFromContext is true
-        $context = array_splice($context, 0, ($bRemoveCallerFromContext ? 3 : 2));
+        $context = array_splice($context, ($bRemoveCallerFromContext ? 3 : 2));
         }
       }
     catch(\Throwable $throwable)
@@ -151,8 +152,46 @@ final class LogTarget implements LoggerAwareInterface
     $strContext = "";
     if(count($context))
       {
-      $strContext = PHP_EOL . "CONTEXT:" . PHP_EOL;
-      $strContext .= print_r($context, true);
+      $strContext = PHP_EOL . " CONTEXT:" . PHP_EOL;
+      foreach($context as $arItem)
+        {
+        if(is_array($arItem) && (isset($arItem["file"]) || isset($arItem['function'])))
+          {
+          $strItem = " ";
+          if(isset($arItem['file']))
+            $strItem .= "{$arItem['file']}:";
+          if(isset($arItem['line']))
+            $strItem .= "{$arItem['line']}:";
+          if(isset($arItem['class']))
+            $strItem .= $arItem['class'] . "::";
+          if(isset($arItem['function']))
+            $strItem .= $arItem['function'];
+          }
+        else if(!is_object($arItem))
+          {
+          $strItem = " UNEXPECTED ITEM: ";
+          $strItem .= gettype($arItem);
+          if(is_array($arItem))
+            {
+            $strItem .= "[";
+            foreach($arItem as $key=>$val)
+              {
+              $strItem .= "'{$key}'=>";
+              if(is_string($val))
+                $strItem .= "'{$val}'";
+              else
+                $strItem .= gettype($val);
+              }
+            $strItem .= "]";
+            }
+          else
+            $strItem .= strval($arItem);
+          }
+        else
+          $strItem = " UNEXPECTED OBJECT: " . get_class($arItem);
+        $strContext .= $strItem . PHP_EOL;
+        }
+      //$strContext .= print_r($context, true);
       }
     if(strlen($message) == 0)
       $message = "(MESSAGE NOT SUPPLIED)";
