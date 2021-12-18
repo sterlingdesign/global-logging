@@ -51,6 +51,14 @@ functions _instead of_ the native PHP `error_log()` function.
     // \Psr\Log\LoggerAwareInterface
     LogTarget::getInstance()->setLogger($log);
 
+    // Optionally, configure other LogTarget properties:
+    // in case you don't have a way to send debug logs back to client (use caution, may fill up your system log)
+    LogTarget::getInstance()->setSendDebugToSyslog(true); 
+    // disable automatic context generation for all LogLevels (not reccomended)
+    LogTarget::getInstance()->setAutomaticContextGenerationLevels([]);
+    // disable storing log calls in memory if you don't need to look at them or your PSR-3 logger already does this
+    LogTarget::getInstance()->setStoreInMemory(false);
+
 *some_application_file.php*
 
     // add records to the log: These functions are supplied by this package:
@@ -108,7 +116,7 @@ to get the array of stored Log calls, you could do the following:
     // \Sterling\LogTarget::getInstance()->setLogger($oMyLogger);
     
     LogDebug("Testing!");
-    print_r(\Sterling\LogTarget::getInstance()->getLog());
+    echo \Sterling\LogTarget::getInstance()->getLogFormatted();
     
 If one of your log handlers already has this functionality, you can
 disable the Sterling\LogTarget store in memory by calling

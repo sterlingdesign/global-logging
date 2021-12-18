@@ -3,7 +3,7 @@
   "type": "library",
   "description": "Implementation of Psr\\Log\\LoggerAwareInterface with Global functions for logging and de-coupling from any implementation",
   "license": "MIT",
-  "keywords": [ "PSR-3","PSR3","Logging","Log","LogError","Sterling","Stack","Sterling Design" ],
+  "keywords": [ "PSR-3","PSR3","Logging","LoggerAwareInterface","Log","LogError","Sterling","Stack","Sterling Design" ],
   "authors": [
     {
       "name": "Seth A. Manley",
