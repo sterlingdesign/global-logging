@@ -17,6 +17,7 @@ final class LogTarget implements LoggerAwareInterface
   private $m_oLogger;
   private $m_arLog;
   private $m_bStoreInMemory = true;
+  private $m_arAutomaticContextLevels = array();
 
 //-------------------------------------------------------------------------------------
   public static function getInstance() : LogTarget
@@ -33,6 +34,7 @@ final class LogTarget implements LoggerAwareInterface
   {
     $this->m_oLogger = null;
     $this->m_arLog = array();
+    $this->setAutomaticContextGenerationLevels();
   }
 //-------------------------------------------------------------------------------------
   public function setLogger(LoggerInterface $logger)
@@ -44,20 +46,32 @@ final class LogTarget implements LoggerAwareInterface
   {
     $this->m_bStoreInMemory = $bStoreLogCalls;
   }
+//-------------------------------------------------------------------------------------
+  public function setAutomaticContextGenerationLevels(array $arLevels = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR])
+  {
+    // TO DO: we could validate the contents of the array
+    $this->m_arAutomaticContextLevels = $arLevels;
+  }
 //-------------------------------------------------------------------------------------------------
   public function LogAtLevel($level, $item, array $context, bool $bRemoveCallerFromContext = false)
   {
-    //static $arLevelsNeedingTrace = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR];
-    static $arLevelsNeedingTrace = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR, LogLevel::DEBUG];
     $level = self::normalizeLevel($level);
     $message = self::getMessageFromItem($item);
-    if(count($context) == 0 && array_search($level, $arLevelsNeedingTrace) !== false)
+    if(count($context) == 0 && array_search($level, $this->m_arAutomaticContextLevels) !== false)
       $context = self::getContextFromItem($item, $bRemoveCallerFromContext);
     $strContext = "";
+    // It would be nice to use the built-in Exception::getTraceAsString(),
+    // however in order to follow the Psr-3 guidelines, we don't know where "$context" came from
+    // and so we need to manually print that array.
     if($this->m_bStoreInMemory || !is_object($this->m_oLogger))
       $strContext = self::formatContext($context);
+    // Note that we do not want to store the $context in memory here,
+    // since it may contain object references: we don't want to prevent
+    // those objects from being deleted from memory once this function call is done
+    // and so we only store the formatted string
     if($this->m_bStoreInMemory)
       $this->storeLogEntry($level, $message, $strContext);
+    // If a PSR-3 Logger was supplied, use that, otherwise send to the PHP system log
     if(is_object($this->m_oLogger))
       $this->m_oLogger->log($level, $message, $context);
     else
@@ -156,7 +170,7 @@ final class LogTarget implements LoggerAwareInterface
         {
         $e = new \Exception(); // we will create an error and get the stack trace from that
         $context = $e->getTrace();
-        // remove this function, LogAtLevel, and one more if $bRemoveCallerFromContext is true
+        // remove this function, LogTarget::LogAtLevel, and one more if $bRemoveCallerFromContext is true
         $context = array_splice($context, ($bRemoveCallerFromContext ? 3 : 2));
         }
       }
@@ -171,14 +185,8 @@ final class LogTarget implements LoggerAwareInterface
   protected static function normalizeLevel($level) : string
   {
     static $arLevels = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::DEBUG, LogLevel::INFO, LogLevel::NOTICE, LogLevel::WARNING, LogLevel::ERROR];
-    // the Psr\Log\LogLevel class provides the constants as strings right now,
-    // but...in the future they may be integers (enum's)
-    if(is_int(LogLevel::ERROR))
-      {
-      if(!is_int($level) || array_search($level, $arLevels))
-        $level = LogLevel::ERROR;
-      }
-    else if(!is_string($level) || array_search($level, $arLevels) === false)
+    // the Psr\Log\LogLevel class provides the constants as strings
+    if(!is_string($level) || array_search($level, $arLevels) === false)
       $level = LogLevel::ERROR;
     return $level;
   }
@@ -193,21 +201,18 @@ final class LogTarget implements LoggerAwareInterface
 //-------------------------------------------------------------------------------------------------
   static private function formatContext(array $context) : string
   {
-  $strContext = count($context) ? PHP_EOL : "";
+    $strContext = "";
+    $i = 0;
     foreach($context as $arItem)
-      $strContext .= self::formatContextItem($arItem) . PHP_EOL;
+      $strContext .= PHP_EOL . self::formatContextItem($arItem, $i++);
     return $strContext;
   }
 //-------------------------------------------------------------------------------------------------
-  static private function formatContextItem($item) : string
+  static private function formatContextItem($item, int $i) : string
   {
+    $strItem = "  #{$i} ";
     if(is_array($item) && (isset($item["file"]) || isset($item['function'])))
       {
-      $strItem = " ";
-      if(isset($item['file']))
-        $strItem .= "{$item['file']}:";
-      if(isset($item['line']))
-        $strItem .= "{$item['line']}:";
       if(isset($item['class']))
         $strItem .= $item['class'] . "::";
       if(isset($item['function']))
@@ -217,11 +222,21 @@ final class LogTarget implements LoggerAwareInterface
           $strItem .= self::formatContextItemArgs($item['args']);
         $strItem .= ")";
         }
+
+      if(isset($item['file']))
+        {
+        $strItem .= " [";
+        $strItem .= "{$item['file']}:";
+        if(isset($item['line']))
+          $strItem .= "{$item['line']}:";
+        $strItem .= "]";
+        }
       }
     else
-      $strItem = self::formatContextItemUnknown($item);
+      $strItem .= self::formatContextItemUnknown($item);
 
-    return $strItem;
+    // we want it on one line:
+    return str_replace(["\n","\r","\t","  "],[" "," "," "," "],$strItem);
   }
 //-------------------------------------------------------------------------------------------------
 static private function formatContextItemArgs($arArgs) : string
@@ -236,15 +251,15 @@ static private function formatContextItemArgs($arArgs) : string
       if(is_object($val))
         $strArgs .= get_class($val);
       else if(is_array($val))
-        $strArgs .= self::dumpArgArray($val);
+        $strArgs .= self::formatArgArray($val);
       else
-        $strArgs .= $val;
-      $s = ", ";
+        $strArgs .= self::dumpUnknownString($val);
+      $s = ",";
       }
     }
   else if(is_object($arArgs))
     {
-    $strArgs = "class " . get_class($arArgs);
+    $strArgs = get_class($arArgs);
     }
   else
     {
@@ -253,7 +268,7 @@ static private function formatContextItemArgs($arArgs) : string
   return $strArgs;
 }
 //-------------------------------------------------------------------------------------------------
- private static function dumpArgArray(array $arVal) : string
+ private static function formatArgArray(array $arVal) : string
  {
    $str = "[";
    $s = "";
@@ -261,13 +276,7 @@ static private function formatContextItemArgs($arArgs) : string
      {
      $str .= $s;
      if(is_string($val))
-       {
-       $str .= "\"";
-       $str .= substr($val, 0, 64);
-       if(strlen($str) > 64)
-         $str .= "...";
-       $str .= "\"";
-       }
+       $str .= self::dumpUnknownString($val);
      else if(is_object($val))
        $str .= get_class($val);
      else
@@ -286,24 +295,43 @@ static private function formatContextItemArgs($arArgs) : string
       {
       $strItem = " UNEXPECTED CONTEXT ITEM: ";
       $strItem .= gettype($item);
+      $strItem .= " = ";
       if(is_array($item))
-        {
-        $strItem .= " = [";
-        $s = "";
-        foreach($item as $key=>$val)
-          {
-          $strItem .= $s . "'{$key}'=>";
-          $strItem .= gettype($val);
-          $s = ",";
-          }
-        $strItem .= "]";
-        }
+        $strItem .= self::dumpUnkownArray($item);
       else
-        {
-        $strItem .= strval($item);
-        }
+        $strItem .= self::dumpUnknownString($item);
       }
 
+    return $strItem;
+  }
+//-------------------------------------------------------------------------------------------------
+  private static function dumpUnkownArray(array $item) : string
+  {
+    $s = "";
+    $strItem = "[";
+    foreach($item as $key=>$val)
+      {
+      $strItem .= $s;
+      if(is_int($key))
+        $strItem .= $key;
+      else
+        $strItem .= self::dumpUnknownString($key);
+      $strItem .= "=>";
+      $strItem .= gettype($val);
+      $s = ",";
+      }
+    $strItem .= "]";
+    return $strItem;
+  }
+//-------------------------------------------------------------------------------------------------
+  private static function dumpUnknownString($item, int $iMaxLen = 64) : string
+  {
+    $strVal = strval($item);
+    $strItem = "\"";
+    $strItem .= substr($strVal, 0, $iMaxLen);
+    if(strlen($strVal) > $iMaxLen)
+      $strItem .= "...";
+    $strItem .= "\"";
     return $strItem;
   }
 }
