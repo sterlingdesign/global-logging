@@ -18,6 +18,7 @@ final class LogTarget implements LoggerAwareInterface
   private $m_arLog;
   private $m_bStoreInMemory = true;
   private $m_arAutomaticContextLevels = array();
+  private $m_bSendDebugToSyslog = false;
 
 //-------------------------------------------------------------------------------------
   public static function getInstance() : LogTarget
@@ -52,6 +53,11 @@ final class LogTarget implements LoggerAwareInterface
     // TO DO: we could validate the contents of the array
     $this->m_arAutomaticContextLevels = $arLevels;
   }
+//-------------------------------------------------------------------------------------
+  public function setSendDebugToSyslog(bool $bSendToPhpSyslog)
+  {
+    $this->m_bSendDebugToSyslog = $bSendToPhpSyslog;
+  }
 //-------------------------------------------------------------------------------------------------
   public function LogAtLevel($level, $item, array $context, bool $bRemoveCallerFromContext = false)
   {
@@ -74,7 +80,7 @@ final class LogTarget implements LoggerAwareInterface
     // If a PSR-3 Logger was supplied, use that, otherwise send to the PHP system log
     if(is_object($this->m_oLogger))
       $this->m_oLogger->log($level, $message, $context);
-    else
+    else if($level !== LogLevel::DEBUG || $this->m_bSendDebugToSyslog)
       self::sendToPhpLog($level, $message, $strContext);
   }
 //-------------------------------------------------------------------------------------------------
