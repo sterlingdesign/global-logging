@@ -16,7 +16,7 @@ ini_set('html_errors', '0');
 // For testing, uncomment the following ini_set line to have PHP create the
 // specified file.  The file will be created relative to the
 // current working directory.
-ini_set('error_log','testing_php_error.log');
+//ini_set('error_log','testing_php_error.log');
 
 // For reference, show where are errors are logged:
 echo "PHP ini_get('error_log') = " . ini_get('error_log') . PHP_EOL;
