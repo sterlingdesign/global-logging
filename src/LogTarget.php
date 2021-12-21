@@ -59,12 +59,12 @@ final class LogTarget implements LoggerAwareInterface
     $this->m_bSendDebugToSyslog = $bSendToPhpSyslog;
   }
 //-------------------------------------------------------------------------------------------------
-  public function LogAtLevel($level, $item, array $context, bool $bRemoveCallerFromContext = false)
+  public function LogAtLevel($level, $item, array $context)
   {
     $level = self::normalizeLevel($level);
     $message = self::getMessageFromItem($item);
     if(count($context) == 0 && array_search($level, $this->m_arAutomaticContextLevels) !== false)
-      $context = self::getContextFromItem($item, $bRemoveCallerFromContext);
+      $context = self::getContextFromItem($item);
     $strContext = "";
     // It would be nice to use the built-in Exception::getTraceAsString(),
     // however in order to follow the Psr-3 guidelines, we don't know where "$context" came from
@@ -137,21 +137,21 @@ final class LogTarget implements LoggerAwareInterface
     try
       {
       // THE MESSAGE
-      if(is_object($E) && get_class($E) != "LibXMLError" && is_a($E, "\Throwable"))
+      if(is_object($E))
         {
-        $strMsgFull = $E->getMessage();
-        }
-      else
-        {
-        if(is_object($E) && get_class($E) == "LibXMLError")
-          $strMsgFull = $E->message;
-        else if(is_object($E))
-          $strMsgFull = "object class:" . get_class($E);
-        else if(is_string($E))
-          $strMsgFull = $E;
+        if(is_a($E, "\LibXMLError") && property_exists($E, "message"))
+          $strMsgFull = trim($E->message);
+        else if(is_a($E, "\Throwable") && method_exists($E, "getMessage"))
+          $strMsgFull = $E->getMessage();
         else
-          $strMsgFull = print_r($E, true);
+          $strMsgFull = "object class:" . get_class($E);
         }
+      else if(is_string($E))
+        $strMsgFull = $E;
+      else if(is_array($E))
+        $strMsgFull = "Array: " . self::dumpUnkownArray($E);
+      else
+        $strMsgFull = gettype($E) . ": " . strval($E);
       }
     catch(\Throwable $throwable)
       {
@@ -160,13 +160,13 @@ final class LogTarget implements LoggerAwareInterface
         $strMsgFull .= "object class:" . get_class($E);
       else
         $strMsgFull .= gettype($E);
-      $strMsgFull .= " while logging message";
+      $strMsgFull .= " while getting error message";
       }
 
     return $strMsgFull;
   }
 //-------------------------------------------------------------------------------------------------
-  protected static function getContextFromItem($item, bool $bRemoveCallerFromContext) : array
+  protected static function getContextFromItem($item) : array
   {
     try
       {
@@ -176,15 +176,14 @@ final class LogTarget implements LoggerAwareInterface
         {
         $e = new \Exception(); // we will create an error and get the stack trace from that
         $context = $e->getTrace();
-        // remove this function, LogTarget::LogAtLevel, and one more if $bRemoveCallerFromContext is true
-        $context = array_splice($context, ($bRemoveCallerFromContext ? 3 : 2));
+        // remove this function and LogTarget::LogAtLevel from where this was called
+        $context = array_splice($context, 2);
         }
       }
     catch(\Throwable $throwable)
       {
       $context = array();
       }
-
     return $context;
   }
 //-------------------------------------------------------------------------------------------------
