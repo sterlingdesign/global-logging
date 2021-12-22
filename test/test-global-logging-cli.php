@@ -29,7 +29,7 @@ ini_set('error_log', __DIR__ . '/testing_php_error.log');
 if(class_exists('\\Monolog\\Logger') && class_exists('\\Monolog\\Handler\\StreamHandler'))
   {
   $log = new \Monolog\Logger('name');
-  $log->pushHandler(new \Monolog\Handler\StreamHandler(__DIR__ . '/testing_monolog.log', Logger::WARNING));
+  $log->pushHandler(new \Monolog\Handler\StreamHandler(__DIR__ . '/testing_monolog.log', \Monolog\Logger::WARNING));
   LogTarget::getInstance()->setLogger($log);
   }
 else
