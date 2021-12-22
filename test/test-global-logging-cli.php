@@ -118,5 +118,33 @@ function run_tests()
   // You can also specify a context to any LogXXXX functions
   LogDebug("Test LogDebug WITH a context", debug_backtrace());
 
+  // Test Logging from inside a class:
+  $oTestClass = new TestClass();
+  $oTestClass->RunTests();
+}
+
+class TestClass
+{
+  public function RunTests()
+  {
+    try
+      {
+      $val = 4.0/0.0;
+      }
+    catch(\Throwable $throwable)
+      {
+      LogError($throwable);
+      }
+
+    LogWarning("A test warning from Test Class");
+    LogCritical("Testing LogCritical from Test Class");
+    LogInfo("Testing LogInfo from Test Class WITH CONTEXT", debug_backtrace());
+    LogError("Testing LogError from Test Class");
+    self::StaticTests();
+  }
+  public static function StaticTests()
+  {
+    LogError("Testing LogError from static TestClass function");
+  }
 }
 

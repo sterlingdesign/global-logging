@@ -16,11 +16,10 @@ final class LogTarget implements LoggerAwareInterface
   public function __wakeup() { throw new \Exception("LogTarget is unserializable"); }
   private function __construct() { }
   /** @var LoggerInterface  */
-  private $m_oLogger;
-  private $m_arLog;
+  private $m_oLogger = null;
+  private $m_arLog = array();
   private $m_bStoreInMemory = true;
   private $m_arAutomaticContextLevels = array();
-  //private $m_arIgnoreLogLevels = array();
   private $m_arIgnoreLogLevels = array();
 
 //-------------------------------------------------------------------------------------
@@ -38,6 +37,7 @@ final class LogTarget implements LoggerAwareInterface
   {
     $this->m_oLogger = null;
     $this->m_arLog = array();
+    $this->setStoreInMemory();
     $this->setAutomaticContextGenerationLevels();
     $this->setIgnoreLogLevels();
   }
@@ -63,16 +63,22 @@ final class LogTarget implements LoggerAwareInterface
     $this->m_arIgnoreLogLevels = $arLevels;
   }
 //-------------------------------------------------------------------------------------------------
-  public function LogAtLevel($level, $item, array $context)
+  public function LogAtLevel($level, $item, ?array $context)
   {
     $level = self::normalizeLevel($level);
     $message = self::getMessageFromItem($item);
-    if(count($context) == 0 && array_search($level, $this->m_arAutomaticContextLevels) !== false)
-      $context = self::getContextFromItem($item);
-    $strContext = "";
+    if(!is_array($context))
+      {
+      if(array_search($level, $this->m_arAutomaticContextLevels) !== false)
+        $context = self::getContextFromItem($item);
+      else
+        $context = array();
+      }
+
     // It would be nice to use the built-in Exception::getTraceAsString(),
     // however in order to follow the Psr-3 guidelines, we don't know where "$context" came from
     // and so we need to manually print that array.
+    $strContext = "";
     if($this->m_bStoreInMemory || !is_object($this->m_oLogger))
       $strContext = self::formatContext($context);
     // Note that we do not want to store the $context in memory here,
@@ -178,8 +184,6 @@ final class LogTarget implements LoggerAwareInterface
         $context = $item->getTrace();
       else
         {
-        //$e = new \Exception(); // we will create an error and get the stack trace from that
-        //$context = $e->getTrace();
         $context = debug_backtrace();
         // remove this function and LogTarget::LogAtLevel from where this was called
         $context = array_splice($context, 2);
@@ -224,7 +228,9 @@ final class LogTarget implements LoggerAwareInterface
     if(is_array($item) && (isset($item["file"]) || isset($item['function'])))
       {
       if(isset($item['class']))
-        $strItem .= $item['class'] . "::";
+        $strItem .= $item['class'];
+      if(isset($item['type']))
+        $strItem .= $item['type'];
       if(isset($item['function']))
         {
         $strItem .= $item['function'] . "(";
