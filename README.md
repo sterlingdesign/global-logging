@@ -11,9 +11,17 @@ The global functions can be called by any function or class member (including st
 class members).  If configured, the globally configured logger is used, otherwise
 the native php `error_log()` function is used.  
 
+For more about PSR-3, see https://www.php-fig.org/psr/psr-3/
+
 ### Installation
 
 `composer require sterlingdesign/global-logging`
+
+The installation includes a test file so that you can verify the installation
+and also experiment with operation and configuration. The script is meant to 
+be run from the command line, for example:
+
+`php -f vendor/sterlingdesign/global-logging/test/test-global-logging-cli.php`
 
 ### Log Target Configuration
 
@@ -38,24 +46,32 @@ functions _instead of_ the native PHP `error_log()` function.
 *your_bootstrap_file.php*
 
     <?php
-    
-    use Monolog\Logger;
-    use Monolog\Handler\StreamHandler;
+
     use Sterling\LogTarget;
+    use Psr\Log\LogLevel;
 
-    // create a log channel
-    $log = new Logger('name');
-    $log->pushHandler(new StreamHandler('path/to/your.log', Logger::WARNING));
+    if(class_exists('\\Monolog\\Logger') && class_exists('\\Monolog\\Handler\\StreamHandler'))
+        {
+        // If Using a PSR-3 Logger, configure it and tell LogTarget to use it:
+        $log = new \Monolog\Logger('name');
+        $log->pushHandler(new \Monolog\Handler\StreamHandler(__DIR__ . '/testing_monolog.log', Logger::WARNING));
+        LogTarget::getInstance()->setLogger($log);
+        }
+    else
+        {
+        // The following option only applies if you are not using a logger:  
+        // If you don't have a way to send debug logs back to the client, 
+        // you may want to write all LogXXXX calls to the PHP system log.
+        // CAUTION: This could potentially result in large amounts of log data
+        LogTarget::getInstance()->setIgnoreLogLevels([]);
+        // Or, maybe you would like to ignore all log calls below Warning
+        // to reduce the amount of data written to the PHP system log:
+        LogTarget::getInstance()->setIgnoreLogLevels([LogLevel::NOTICE, LogLevel::INFO, LogLevel::DEBUG]);
+        }
     
-    // \Sterling\LogTarget is a single instance class that implements the
-    // \Psr\Log\LoggerAwareInterface
-    LogTarget::getInstance()->setLogger($log);
-
-    // Optionally, configure other LogTarget properties:
-    // in case you don't have a way to send debug logs back to client (use caution, may fill up your system log)
-    LogTarget::getInstance()->setSendDebugToSyslog(true); 
-    // disable automatic context generation for all LogLevels (not reccomended)
-    LogTarget::getInstance()->setAutomaticContextGenerationLevels([]);
+    // - Configure other LogTarget Options:    
+    // enable automatic context generation for all LogLevels for more detail:
+    LogTarget::getInstance()->setAutomaticContextGenerationLevels(LogTarget::ALL_LEVELS);
     // disable storing log calls in memory if you don't need to look at them or your PSR-3 logger already does this
     LogTarget::getInstance()->setStoreInMemory(false);
 
@@ -65,6 +81,9 @@ functions _instead of_ the native PHP `error_log()` function.
     LogWarning('Foo');
     LogError('Bar');
     LogDebug("Testing!");
+
+For a working example, see the included test script that should be installed 
+at `vendor\sterlingdesign\global-logging\test\test-global-logging-cli.php`
 
 ### Global Functions
 
@@ -101,6 +120,7 @@ the LogTarget directly, for example:
 
 ### Additional Functionality
 
+#### In-Memory Log Store
 In addition to forwarding LogXXXX function calls to a PSR-3 Logger (if configured) 
 or php log (if no PSR-3 Logger is configured),
 the LogTarget class also stores the current requests' Log call Information in
@@ -108,7 +128,7 @@ an in-memory array.  This is useful for dumping current request log info
 back to the client when debugging.
 
 By default, each call to the LogXXXX functions for the current request is 
-stored in an array of arrays based on the Psr\Log\LogLevel.  For example,
+stored in an array of arrays.  For example,
 to get the array of stored Log calls, you could do the following:
 
     require_once "path/to/your/autoload.php";
@@ -128,6 +148,18 @@ Dynamically depending on if you are debugging or not:
 
     \Sterling\LogTarget::getInstance()->setStoreInMemory(IsDebug());
     
+#### Automatic Context Generation
+
+The PSR-3 standard provides for supplying a context to the Logger::log
+functions.  These contexts can be automatically generated in the
+form of a debug_backtrace if not explicitly supplied to the LogXXXX functions.
+
+You can control which LogLevel's, if any, get automatically generated
+backtraces using the LogTarget::setAutomaticContextGenerationLevels()
+function.  The argument should be an array specifying which LogLevels 
+should have contexts generated automatically. To disable automatic context 
+generation, pass an empty array.
+
 ### Roadmap
 
 The current implementation provides a basic php log file output without 

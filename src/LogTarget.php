@@ -9,6 +9,8 @@ use Psr\Log\LogLevel;
 
 final class LogTarget implements LoggerAwareInterface
 {
+  const ALL_LEVELS = [LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR, LogLevel::WARNING, LogLevel::NOTICE, LogLevel::INFO, LogLevel::DEBUG];
+
   private static $instance = null;
   private function __clone() { }
   public function __wakeup() { throw new \Exception("LogTarget is unserializable"); }
@@ -18,7 +20,8 @@ final class LogTarget implements LoggerAwareInterface
   private $m_arLog;
   private $m_bStoreInMemory = true;
   private $m_arAutomaticContextLevels = array();
-  private $m_bSendDebugToSyslog = false;
+  //private $m_arIgnoreLogLevels = array();
+  private $m_arIgnoreLogLevels = array();
 
 //-------------------------------------------------------------------------------------
   public static function getInstance() : LogTarget
@@ -36,6 +39,7 @@ final class LogTarget implements LoggerAwareInterface
     $this->m_oLogger = null;
     $this->m_arLog = array();
     $this->setAutomaticContextGenerationLevels();
+    $this->setIgnoreLogLevels();
   }
 //-------------------------------------------------------------------------------------
   public function setLogger(LoggerInterface $logger)
@@ -54,9 +58,9 @@ final class LogTarget implements LoggerAwareInterface
     $this->m_arAutomaticContextLevels = $arLevels;
   }
 //-------------------------------------------------------------------------------------
-  public function setSendDebugToSyslog(bool $bSendToPhpSyslog)
+  public function setIgnoreLogLevels(array $arLevels = [LogLevel::DEBUG])
   {
-    $this->m_bSendDebugToSyslog = $bSendToPhpSyslog;
+    $this->m_arIgnoreLogLevels = $arLevels;
   }
 //-------------------------------------------------------------------------------------------------
   public function LogAtLevel($level, $item, array $context)
@@ -80,7 +84,7 @@ final class LogTarget implements LoggerAwareInterface
     // If a PSR-3 Logger was supplied, use that, otherwise send to the PHP system log
     if(is_object($this->m_oLogger))
       $this->m_oLogger->log($level, $message, $context);
-    else if($level !== LogLevel::DEBUG || $this->m_bSendDebugToSyslog)
+    else if(array_search($level, $this->m_arIgnoreLogLevels) === false)
       self::sendToPhpLog($level, $message, $strContext);
   }
 //-------------------------------------------------------------------------------------------------
@@ -174,8 +178,9 @@ final class LogTarget implements LoggerAwareInterface
         $context = $item->getTrace();
       else
         {
-        $e = new \Exception(); // we will create an error and get the stack trace from that
-        $context = $e->getTrace();
+        //$e = new \Exception(); // we will create an error and get the stack trace from that
+        //$context = $e->getTrace();
+        $context = debug_backtrace();
         // remove this function and LogTarget::LogAtLevel from where this was called
         $context = array_splice($context, 2);
         }
@@ -233,7 +238,7 @@ final class LogTarget implements LoggerAwareInterface
         $strItem .= " [";
         $strItem .= "{$item['file']}:";
         if(isset($item['line']))
-          $strItem .= "{$item['line']}:";
+          $strItem .= "{$item['line']}";
         $strItem .= "]";
         }
       }
@@ -310,13 +315,18 @@ static private function formatContextItemArgs($arArgs) : string
     return $strItem;
   }
 //-------------------------------------------------------------------------------------------------
-  private static function dumpUnkownArray(array $item) : string
+  private static function dumpUnkownArray(array $item, int $iMaxLen = 64) : string
   {
     $s = "";
     $strItem = "[";
     foreach($item as $key=>$val)
       {
       $strItem .= $s;
+      if(strlen($strItem) >= $iMaxLen)
+        {
+        $strItem .= "...";
+        break;
+        }
       if(is_int($key))
         $strItem .= $key;
       else

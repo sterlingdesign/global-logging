@@ -3,68 +3,95 @@ require_once __DIR__ . "/../../../autoload.php";
 use Sterling\LogTarget;
 use Psr\Log\LogLevel;
 
+//-------------------------------------------------------------------------------------------------
+// - Configure the PHP Logging behavior for testing
 ini_set('error_reporting', E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('html_errors', '0');
 
-// PHP error_log
+// - PHP error_log
 //
 // In a normal website environment, the php error_log would usually be set.
 // "If this directive is not set, errors are sent to the SAPI error logger.
 // For example, it is an error log in Apache or stderr in CLI."
 // For testing, uncomment the following ini_set line to have PHP create the
 // specified file.  The file will be created relative to the
-// current working directory.
-//ini_set('error_log','testing_php_error.log');
+// current working directory if an absolute path is not provided.
+ini_set('error_log', __DIR__ . '/testing_php_error.log');
 
-// For reference, show where are errors are logged:
-echo "PHP ini_get('error_log') = " . ini_get('error_log') . PHP_EOL;
+//-------------------------------------------------------------------------------------------------
+// - Configure the global instance of LogTarget:
+// \Sterling\LogTarget is a single instance class that implements
+// the \Psr\Log\LoggerAwareInterface
 
-// Configure the global instance of LogTarget:
-// \Sterling\LogTarget is a single instance class that implements the \Psr\Log\LoggerAwareInterface
-
-// if monolog is installed, set it up as the LogTarget
+// --- If Using a PSR-3 Logger, configure it and tell LogTarget to use it:
 if(class_exists('\\Monolog\\Logger') && class_exists('\\Monolog\\Handler\\StreamHandler'))
   {
   $log = new \Monolog\Logger('name');
-  $log->pushHandler(new \Monolog\Handler\StreamHandler('testing_monolog.log', Logger::WARNING));
+  $log->pushHandler(new \Monolog\Handler\StreamHandler(__DIR__ . '/testing_monolog.log', Logger::WARNING));
   LogTarget::getInstance()->setLogger($log);
   }
+else
+  {
+  // When using native PHP system logging, you can configure which LogLevel's are
+  // NOT written to the log file:
+  // Write all LogXXXX calls to the system log:
+  LogTarget::getInstance()->setIgnoreLogLevels([]);
+  // The default is to only ignore LogDebug - all other log levels are written
+  LogTarget::getInstance()->setIgnoreLogLevels([LogLevel::DEBUG]);
+  }
 
-// Optionally, configure other LogTarget properties:
-
-// In case you don't have a way to send debug logs back to client (use caution, may fill up your system log)
-//LogTarget::getInstance()->setSendDebugToSyslog(true);
+// - Optionally, configure other LogTarget properties:
 
 // You can Disable automatic context generation for all LogLevels
-//LogTarget::getInstance()->setAutomaticContextGenerationLevels([]);
-// Or configure which levels get automatic context generation
-//LogTarget::getInstance()->setAutomaticContextGenerationLevels([LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR, LogLevel::DEBUG]);
+LogTarget::getInstance()->setAutomaticContextGenerationLevels([]);
+// Or Enable automatic context generation for all LogLevels
+LogTarget::getInstance()->setAutomaticContextGenerationLevels(LogTarget::ALL_LEVELS);
+// Or Enable automatic context generation for specific LogLevels
+LogTarget::getInstance()->setAutomaticContextGenerationLevels([LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR]);
 
 // You can disable storing log calls in memory if you don't need to look at them or
 // your PSR-3 logger already does this. The default is to store all calls passed
 // through the LogXXXX functions.
-// For these tests, we will store them in memory
-//LogTarget::getInstance()->setStoreInMemory(false);
+LogTarget::getInstance()->setStoreInMemory(false);
+// For these tests, we will store them in memory and display the contents after testing
+LogTarget::getInstance()->setStoreInMemory(true);
 
+//-------------------------------------------------------------------------------------------------
+// - For reference, show where PHP errors, warnings and calls to error_log() are sent:
+echo "PHP is writing errors and warnings to ";
+if(empty(ini_get('error_log')))
+  {
+  if(php_sapi_name() === 'cli')
+     echo "the CLI STDERR";
+  else
+    echo "the SAPI error logger";
+  }
+else
+  echo "the file " . ini_get('error_log');
+echo PHP_EOL;
+
+//-------------------------------------------------------------------------------------------------
+// - Run some tests
 echo "TESTING THE LogXXXX FUNCTIONS..." . PHP_EOL;
-
 run_tests();
-
 echo PHP_EOL . "CONTENTS OF THE LogTarget's IN MEMORY LOG:" . PHP_EOL;
 echo LogTarget::getInstance()->getLogFormatted();
 
+//-------------------------------------------------------------------------------------------------
 function run_tests()
 {
-// If the first parameter of any of the LogXXXX functions is a string, that string will be used
-// as the message:
+  // If the first parameter of any of the LogXXXX functions is a string,
+  // that string will be used as the message:
   LogDebug("Testing LogDebug");
   LogWarning("Testing LogWarning");
   LogError("Testing LogError");
 
-// If the first parameter to any of the LogXXXX functions is a Throwable (Exception) object, that objects
-// message and context are used
+  // If the first parameter to any LogXXXX functions is a Throwable
+  // object, that objects getMessage() function is used as the
+  // logged message, and its getTrace() function is used as
+  // the context (unless a context is explicitly supplied)
   try
     {
     $oNone = new \NonExistant\ClassObj();
@@ -75,11 +102,9 @@ function run_tests()
     LogError($throwable);
     }
 
-// You can also specify a context to the LogXXXX functions as the second parameter
-  LogDebug("Test LogDebug WITH a context", debug_backtrace());
-
-// If you pass an array to the LogXXXX functions, the message displayed will consist of the
-//  first level keys and value types of the array
+  // If first parameter to any LogXXXX function is an array,
+  // the message displayed will consist of the
+  // keys and value types of the first level array elemements
   LogDebug(["Some Text", 42, ["child array"]]);
 
   // LibXMLError is a special type not derived from \Throwable
@@ -89,5 +114,9 @@ function run_tests()
     if(false == $oDoc->load("Non-Existent-File.bad"))
       LogError(libxml_get_last_error());
     }
+
+  // You can also specify a context to any LogXXXX functions
+  LogDebug("Test LogDebug WITH a context", debug_backtrace());
+
 }
 
